@@ -1,0 +1,88 @@
+<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BTC 抄底时机看板</title>
+<link rel="manifest" href="manifest.webmanifest"><meta name="theme-color" content="#0e1116"><link rel="icon" href="icons/icon-192.png"><link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#0e1116;--c:#171b22;--t:#e6e9ef;--m:#8b93a1;--g:#2ebd85;--r:#f6465d;--y:#f0b90b}
+*{box-sizing:border-box}body{margin:0 auto;background:var(--bg);color:var(--t);font:14px/1.55 -apple-system,"PingFang SC","Microsoft YaHei",sans-serif;padding:16px;max-width:1100px}
+h1{font-size:20px;margin:0}h2{font-size:15px;margin:0 0 8px}.sub{color:var(--m);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin:12px 0}
+.card{background:var(--c);border-radius:12px;padding:14px;margin-bottom:12px}.grid .card{margin:0}
+.big{font-size:30px;font-weight:700}.m{color:var(--m)}.up{color:var(--g)}.dn{color:var(--r)}
+table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid #262c36;text-align:left;font-weight:400}th{color:var(--m);font-size:12px}
+.bar{height:8px;background:#262c36;border-radius:4px;overflow:hidden;min-width:70px}.bar i{display:block;height:100%}
+button,input{background:#262c36;color:var(--t);border:0;border-radius:6px;padding:5px 8px;font:inherit}input{width:70px}
+.tag{padding:1px 6px;border-radius:4px;font-size:12px}.bad{background:#4a1d26;color:#ff8a98}.neu{background:#3a3417;color:#f0d36b}
+.lg span{display:inline-block;margin:2px 8px 0 0;font-size:12px}.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:3px}
+</style></head><body>
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+<div><h1>BTC 抄底时机看板</h1><div class="sub" id="st">加载中…</div></div><button onclick="load()">立即刷新</button></div>
+<div class="grid"><div class="card" id="c1"></div><div class="card" id="c2"></div><div class="card" id="c3"></div></div>
+<div class="card"><h2>时机图：价格 × 彩虹带 × 挖矿成本（对数坐标，周线）</h2><canvas id="cv"></canvas><div class="lg" id="lg"></div></div>
+<div class="card"><h2>抄底评分拆解</h2><table id="ft"></table>
+<div class="sub" style="margin-top:10px">挖矿成本假设（可改）：全网矿机效率 <input id="eff" value="24"> J/TH · 电价 <input id="kwh" value="0.065"> $/kWh · 手续费占比 <input id="fee" value="2"> % · 全成本倍数 <input id="mult" value="1.4"></div></div>
+<div class="card"><h2>分批关键价位</h2><table id="lv"></table></div>
+<div class="card"><h2>大政策 / 宏观参考（2026-10-08 快照，静态，需自行核实更新）</h2><table id="pl">
+<tr><th>日期</th><th>事件</th><th>影响</th></tr>
+<tr><td>9/16</td><td>美联储加息至 3.75%–4.00%，为 2023 年以来首次加息</td><td><span class="tag bad">利空</span></td></tr>
+<tr><td>10/27–28</td><td>FOMC 会议；Polymarket 约 64% 概率再加息 25bp——<b>最关键节点</b></td><td><span class="tag bad">利空/高波动</span></td></tr>
+<tr><td>宏观</td><td>10 年期美债收益率约 5.17%，油价在 100 美元上方，分流风险资产资金</td><td><span class="tag bad">利空</span></td></tr>
+<tr><td>9 月底</td><td>CLARITY Act（市场结构法案）在参议院被否决，监管明确性推迟</td><td><span class="tag bad">利空</span></td></tr>
+<tr><td>10/1 → 10/20</td><td>SEC 提出加密托管新规，意见征集截止 10/20</td><td><span class="tag neu">中性偏多</span></td></tr>
+<tr><td>资金面</td><td>现货 ETF 9 月净流入约 26.5 亿美元；10 月初出现单日净流出，动能有分化</td><td><span class="tag neu">观察</span></td></tr>
+</table><div class="sub" style="margin-top:6px">来源：Yahoo Finance / 24/7 Wall St（9/27、9/30）、CoinStats（10/4）等媒体报道。政策不计入评分，仅作风向参考。</div></div>
+<div class="sub">仅为数据整理与量化参考，不构成投资建议。彩虹带为基于幂律回归的近似模型，非 Blockchaincenter 官方版本。</div>
+<script>
+const $=id=>document.getElementById(id),H=['https://data-api.binance.vision','https://api.binance.com'];
+const G0=Date.UTC(2009,0,3),fair=t=>Math.pow(10,-17.0161223+5.8451542*Math.log10((t-G0)/864e5));
+const E=[.4,.55,.75,1,1.35,1.8,2.4,3.2],N=['火甩卖','BUY!','加仓','仍便宜','持有','泡沫?','FOMO','卖出','极度泡沫'],
+CL=['#5b2a86','#2f5fd0','#2a9d8f','#4cc26b','#c7d93a','#f0b90b','#f08a24','#e8503a','#b3202c'];
+let S={};try{S=JSON.parse(localStorage.getItem('btcS'))||{}}catch(e){}
+try{const u=JSON.parse(localStorage.getItem('btcU')||'{}');for(const k in u)$(k).value=u[k]}catch(e){}
+['eff','kwh','fee','mult'].forEach(k=>$(k).onchange=()=>{try{localStorage.setItem('btcU',JSON.stringify(Object.fromEntries(['eff','kwh','fee','mult'].map(k=>[k,$(k).value]))))}catch(e){}render()});
+$('lg').innerHTML=N.map((n,i)=>`<span><i style="background:${CL[i]}"></i>${n}</span>`).join('');
+async function j(u){const c=new AbortController();setTimeout(()=>c.abort(),9000);const r=await fetch(u,{signal:c.signal});if(!r.ok)throw 0;return r.json()}
+async function bn(p){for(const h of H){try{return await j(h+p)}catch(e){}}throw 0}
+const cl=x=>Math.max(0,Math.min(1,x)),lin=(x,a,b)=>cl((b-x)/(b-a))*100,$$=n=>'$'+Math.round(n).toLocaleString('en-US');
+async function load(){$('st').textContent='刷新中…';const s=S;s.live=0;
+try{const k=await bn('/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=1000');s.w=k.map(x=>[+x[0],+x[4]]);s.ath=Math.max(...k.map(x=>+x[2]));const c=s.w.slice(-200).map(x=>x[1]);s.wma=c.reduce((a,b)=>a+b)/c.length;s.price=s.w[s.w.length-1][1];s.live=1}catch(e){}
+try{const t=await bn('/api/v3/ticker/24hr?symbol=BTCUSDT');s.price=+t.lastPrice;s.chg=+t.priceChangePercent}catch(e){}
+if(!s.live){try{const d=await j('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true');s.price=d.bitcoin.usd;s.chg=d.bitcoin.usd_24h_change}catch(e){}}
+try{s.fng=+(await j('https://api.alternative.me/fng/?limit=1')).data[0].value}catch(e){}
+try{s.hr=(await j('https://mempool.space/api/v1/mining/hashrate/3d')).currentHashrate/1e18}catch(e){}
+s.t=Date.now();try{localStorage.setItem('btcS',JSON.stringify(s))}catch(e){}render()}
+function render(){const s=S,P=+s.price;if(!P){$('st').textContent='数据获取失败：请检查网络后点击“立即刷新”';return}
+const u={eff:+$('eff').value||24,kwh:+$('kwh').value||.065,fee:+$('fee').value||0,mult:+$('mult').value||1.4},hr=s.hr||1000;
+const mc=hr*1e3*u.eff*24*u.kwh/(144*3.125*(1+u.fee/100)),full=mc*u.mult,f=fair(Date.now()),ra=P/f;
+const ath=Math.max(s.ath||0,P),dd=s.ath?1-P/ath:null;
+const F=[['彩虹/幂律估值',`现价 = 公允值 ${ra.toFixed(2)}×`,lin(ra,.4,1.4),30],
+['挖矿成本',`现价 / 电费成本 = ${(P/mc).toFixed(2)}×（成本≈${$$(mc)}，算力${s.hr?s.hr.toFixed(0)+' EH/s':'1000 EH/s(默认)'}）`,lin(P/mc,.9,2),25],
+['距历史高点回撤',dd==null?'—':`-${(dd*100).toFixed(1)}%（高点 ${$$(ath)}）`,dd==null?null:lin(dd,.6,.1),15],
+['200 周均线',s.wma?`现价 / 200WMA = ${(P/s.wma).toFixed(2)}×（${$$(s.wma)}）`:'—',s.wma?lin(P/s.wma,1,2.5):null,15],
+['恐惧贪婪指数',s.fng!=null?`${s.fng}`:'—',s.fng!=null?lin(s.fng,20,75):null,15]];
+const ok=F.filter(x=>x[2]!=null),sc=ok.reduce((a,x)=>a+x[2]*x[3],0)/ok.reduce((a,x)=>a+x[3],0);
+const tier=sc>=80?'重仓区：可分批重仓':sc>=65?'偏便宜：分批建仓':sc>=50?'中性偏低：小额定投':sc>=35?'偏贵：观望，等回调':'过热：不追高';
+const col=sc>=65?'var(--g)':sc>=50?'#a8d86a':sc>=35?'var(--y)':'var(--r)';
+let bi=E.findIndex(e=>ra<e);if(bi<0)bi=8;
+$('c1').innerHTML=`<div class="m">BTC/USDT</div><div class="big">${$$(P)}</div><div class="${s.chg>=0?'up':'dn'}">${s.chg!=null?(s.chg>=0?'+':'')+(+s.chg).toFixed(2)+'% (24h)':''}</div><div class="m">${dd!=null?'较高点 -'+(dd*100).toFixed(1)+'%':''}</div>`;
+$('c2').innerHTML=`<div class="m">综合抄底评分（0–100）</div><div class="big" style="color:${col}">${sc.toFixed(0)}</div><div class="bar"><i style="width:${sc}%;background:${col}"></i></div><div style="margin-top:6px">${tier}</div>`;
+$('c3').innerHTML=`<div class="m">当前彩虹区间</div><div class="big" style="color:${CL[bi]}">${N[bi]}</div><div class="m">公允值约 ${$$(f)}；现价为其 ${ra.toFixed(2)}×</div>`;
+$('ft').innerHTML='<tr><th>指标</th><th>读数</th><th>权重</th><th>得分</th></tr>'+F.map(x=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${x[3]}%</td><td>${x[2]==null?'—':`<div class="bar"><i style="width:${x[2]}%;background:${x[2]>60?'var(--g)':x[2]>35?'var(--y)':'var(--r)'}"></i></div>`+x[2].toFixed(0)}</td></tr>`).join('');
+const L=[['200 周均线',s.wma],['矿工电费成本',mc],['矿工全成本',full],['彩虹 BUY! 上沿 (0.55×)',.55*f],['彩虹 火甩卖线 (0.40×)',.4*f]].filter(x=>x[1]).sort((a,b)=>b[1]-a[1]);
+$('lv').innerHTML='<tr><th>参考位</th><th>价格</th><th>距现价</th></tr>'+L.map(x=>`<tr><td>${x[0]}</td><td>${$$(x[1])}</td><td class="${x[1]<P?'dn':'up'}">${((x[1]/P-1)*100).toFixed(1)}%</td></tr>`).join('');
+$('st').textContent=`${s.live?'币安实时数据':'备用数据源（K线不可用，部分指标缺失）'} · 更新于 ${new Date(s.t).toLocaleString()} · 每 24 小时自动刷新，下次 ${new Date(s.t+864e5).toLocaleString()}`;
+draw(mc,full)}
+function draw(mc,full){const s=S;if(!s.w)return;const cv=$('cv'),d=devicePixelRatio||1,W=Math.max(300,cv.parentNode.clientWidth-28),Hh=380;
+cv.width=W*d;cv.height=Hh*d;cv.style.width=W+'px';cv.style.height=Hh+'px';const x=cv.getContext('2d');x.scale(d,d);
+const L=46,R=8,T=8,B=22,w=s.w,t0=w[0][0],t1=w[w.length-1][0]+52*6048e5,
+lo=Math.log10(Math.min(...w.map(a=>a[1]))*.6),hi=Math.log10(Math.max(...w.map(a=>a[1]))*1.5),
+X=t=>L+(t-t0)/(t1-t0)*(W-L-R),Y=v=>T+(hi-Math.log10(v))/(hi-lo)*(Hh-T-B);
+x.fillStyle='#171b22';x.fillRect(0,0,W,Hh);x.save();x.beginPath();x.rect(L,T,W-L-R,Hh-T-B);x.clip();
+const ts=[];for(let t=t0;t<=t1;t+=6048e5)ts.push(t);const Bd=[.2].concat(E,[6]);
+for(let i=0;i<9;i++){x.beginPath();ts.forEach((t,k)=>{const px=X(t),py=Y(fair(t)*Bd[i+1]);k?x.lineTo(px,py):x.moveTo(px,py)});
+for(let k=ts.length-1;k>=0;k--)x.lineTo(X(ts[k]),Y(fair(ts[k])*Bd[i]));x.closePath();x.globalAlpha=.5;x.fillStyle=CL[i];x.fill()}
+x.globalAlpha=1;x.strokeStyle='#fff';x.lineWidth=1.8;x.beginPath();w.forEach((a,k)=>k?x.lineTo(X(a[0]),Y(a[1])):x.moveTo(X(a[0]),Y(a[1])));x.stroke();
+x.setLineDash([6,4]);x.lineWidth=1.3;[[mc,'#fff','电费成本'],[full,'#ffd27a','全成本']].forEach(a=>{x.strokeStyle=a[1];x.beginPath();x.moveTo(X(Date.now()-730*864e5),Y(a[0]));x.lineTo(X(t1),Y(a[0]));x.stroke();x.fillStyle=a[1];x.font='11px sans-serif';x.fillText(a[2],X(t1)-62,Y(a[0])-4)});
+x.setLineDash([]);const lp=w[w.length-1];x.fillStyle='#fff';x.beginPath();x.arc(X(lp[0]),Y(S.price),4,0,7);x.fill();x.restore();
+x.fillStyle='#8b93a1';x.font='11px sans-serif';[5e3,1e4,2e4,5e4,1e5,2e5,5e5].forEach(v=>{if(Math.log10(v)>lo&&Math.log10(v)<hi)x.fillText(v>=1e3?v/1e3+'k':v,4,Y(v)+4)});
+for(let y=new Date(t0).getUTCFullYear()+1;y<=new Date(t1).getUTCFullYear();y++)x.fillText(y,X(Date.UTC(y,0,1))-12,Hh-6)}
+load();setInterval(load,864e5);addEventListener('resize',()=>S.price&&render());
+</script><script>if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script></body></html>
